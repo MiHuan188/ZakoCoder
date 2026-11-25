@@ -216,7 +216,8 @@ internal class AiResponsesStream(private val delta: (String) -> Unit = {},
         if (suppliedIndex == null && itemId == null && callId == null) invalid("responses_unknown_output_item")
         val matches = items.filter { (index, item) ->
             (suppliedIndex == null || suppliedIndex == index) && (callId == null || callId == item.callId) &&
-                (itemId == null || itemId == item.id || (!item.explicitId && (suppliedIndex != null || callId != null)))
+                (itemId == null || itemId == item.id || suppliedIndex == index ||
+                    (!item.explicitId && (suppliedIndex != null || callId != null)))
         }
         if (matches.size != 1) invalid(if (matches.isEmpty() && suppliedIndex != null && items[suppliedIndex] == null)
             "responses_unknown_output_item" else "responses_item_identity_mismatch")
@@ -227,7 +228,9 @@ internal class AiResponsesStream(private val delta: (String) -> Unit = {},
     private fun bindId(index: Int, item: Item, id: String) {
         if (id.isEmpty() || id.length > 200) invalid("invalid_tool_identity")
         if (items.any { it.key != index && it.value.id == id }) invalid("responses_duplicate_item_id")
-        if (item.explicitId && item.id != id) invalid("responses_item_identity_mismatch")
+        // Intermediary gateways may regenerate an item id when they synthesise the terminal
+        // snapshot. Identity is anchored on output_index and, for tool calls, on call_id
+        // (validated in add()), so a changed id is a refresh rather than a protocol violation.
         item.id = id; item.explicitId = true
     }
     private fun add(index: Int, value: JSONObject): Item {
